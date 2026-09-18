@@ -1,0 +1,81 @@
+"""
+pipeline.py
+Integrated Text Summarization + Sentiment Analysis pipeline.
+
+Matches the methodology in Chapter 5 of the project report:
+    Step 1: Receive user text
+    Step 2: Validate / truncate input to 1024 tokens
+    Step 3: Generate summary using BART (num_beams=4, length_penalty=2.0,
+             max_length=150, min_length=30)
+    Step 4: Run sentiment analysis (DistilBERT) on the generated summary
+    Step 5: Return a combined JSON-style response
+
+Dependencies:
+    pip install transformers torch
+"""
+
+from transformers import pipeline
+
+# Models are loaded once at module import time so repeated calls
+# to summarize_and_analyze() don't reload weights every time.
+_summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+_sentiment_analyzer = pipeline(
+    "sentiment-analysis",
+    model="distilbert-base-uncased-finetuned-sst-2-english",
+)
+
+MAX_INPUT_TOKENS = 1024
+
+
+def summarize_and_analyze(text: str) -> dict:
+    """
+    Summarize `text` with BART, then run sentiment analysis on the
+    summary with DistilBERT.
+
+    Args:
+        text: Raw input text (news article, review, abstract, etc.)
+
+    Returns:
+        dict with keys:
+            "summary"   -> generated summary string
+            "sentiment" -> label, e.g. "POSITIVE" / "NEGATIVE"
+            "confidence"-> softmax probability of that label
+    """
+    if not text or not text.strip():
+        raise ValueError("Input text is empty.")
+
+    # Step 2: crude truncation to keep within the model's token budget.
+    # (word-based here for simplicity; a real tokenizer count is stricter)
+    words = text.split()
+    if len(words) > MAX_INPUT_TOKENS:
+        text = " ".join(words[:MAX_INPUT_TOKENS])
+
+    # Step 3: abstractive summarization
+    summary_out = _summarizer(
+        text,
+        max_length=150,
+        min_length=30,
+        num_beams=4,
+        length_penalty=2.0,
+        truncation=True,
+    )
+    summary = summary_out[0]["summary_text"]
+
+    # Step 4: sentiment on the summary (not the raw text)
+    sentiment_out = _sentiment_analyzer(summary)[0]
+
+    # Step 5: combined response
+    return {
+        "summary": summary,
+        "sentiment": sentiment_out["label"],
+        "confidence": round(sentiment_out["score"], 4),
+    }
+
+
+if __name__ == "__main__":
+    sample = (
+        "The company reported record quarterly revenue, but warned that "
+        "rising costs and supply chain disruptions could hurt profits "
+        "next year. Investors reacted cautiously to the announcement."
+    )
+    print(summarize_and_analyze(sample))

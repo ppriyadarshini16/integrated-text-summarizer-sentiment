@@ -1,0 +1,37 @@
+"""
+app.py
+Streamlit frontend for the Integrated Text Summarization + Sentiment
+Analysis system (Chapter 5, "Real-time Deployment" objective).
+
+Run with:
+    streamlit run app.py
+"""
+
+import streamlit as st
+from src.pipeline import summarize_and_analyze
+
+st.set_page_config(page_title="Text Summarizer + Sentiment", page_icon="📝")
+
+st.title("📝 Integrated Text Summarization & Sentiment Analysis")
+st.caption("BART (summarization) + DistilBERT (sentiment) — Minor Project-II")
+
+text = st.text_area("Paste your article / review / abstract:", height=250)
+
+if st.button("Analyze", type="primary"):
+    if not text.strip():
+        st.warning("Please enter some text first.")
+    else:
+        with st.spinner("Summarizing and analyzing sentiment..."):
+            try:
+                result = summarize_and_analyze(text)
+            except Exception as e:
+                st.error(f"Something went wrong: {e}")
+            else:
+                st.subheader("Summary")
+                st.write(result["summary"])
+
+                st.subheader("Sentiment")
+                label = result["sentiment"]
+                confidence = result["confidence"]
+                emoji = "🙂" if label == "POSITIVE" else "🙁"
+                st.write(f"{emoji} **{label}** (confidence: {confidence})")
